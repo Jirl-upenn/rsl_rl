@@ -27,6 +27,7 @@ class OnPolicyRunner:
         self.policy_cfg = train_cfg["policy"]
         self.device = device
         self.env = env
+        self.max_reward = 0.0
 
         # resolve dimensions of observations
         obs, extras = self.env.get_observations()
@@ -216,8 +217,13 @@ class OnPolicyRunner:
                 # Log information
                 self.log(locals())
                 # Save model
+                curr_reward = statistics.mean(rewbuffer)
                 if it % self.save_interval == 0:
-                    self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
+                    self.save(os.path.join(self.log_dir, f"model_{it}_{int(curr_reward)}.pt"))
+                if curr_reward > self.max_reward:
+                    self.save(os.path.join(self.log_dir, "best_model.pt"))
+                    print(f"New best model saved with reward: {curr_reward}")
+                    self.max_reward = curr_reward
 
             # Clear episode infos
             ep_infos.clear()
