@@ -239,7 +239,7 @@ class OnPolicyRunner:
 
         # Save the final model after training
         if self.log_dir is not None:
-            self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
+            self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}_{int(curr_reward)}.pt"))
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
