@@ -34,15 +34,14 @@ class FiLMActor(nn.Module):
         super().__init__()
         self.activation = activation
         self.fc1 = nn.Linear(mlp_input_dim, actor_hidden_dims[0])
-        self.film = ScalarFiLM(cond_dim, film_hidden_dims)
-        self.cond_dim = cond_dim
-
         self.hidden_layers = nn.ModuleList()
         for i in range(1, len(actor_hidden_dims)):
             self.hidden_layers.append(nn.Linear(actor_hidden_dims[i - 1], actor_hidden_dims[i]))
-
         self.output_layer = nn.Linear(actor_hidden_dims[-1], num_actions)
         self.tanh = nn.Tanh()
+
+        self.film = ScalarFiLM(cond_dim, film_hidden_dims)
+        self.cond_dim = cond_dim
 
     def forward(self, obs):
         x = self.activation(self.fc1(obs))
