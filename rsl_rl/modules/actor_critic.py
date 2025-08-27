@@ -11,46 +11,6 @@ from torch.distributions import Normal
 
 from rsl_rl.utils import resolve_nn_activation
 
-class ScalarFiLM(nn.Module):
-    def __init__(self, cond_dim, film_hidden_dims):
-        super().__init__()
-        self.mlp = nn.Sequential(
-            nn.Linear(cond_dim, film_hidden_dims[0]),
-            nn.GELU(),
-            nn.Linear(film_hidden_dims[0], film_hidden_dims[1]),
-            nn.GELU(),
-            nn.Linear(film_hidden_dims[1], 2)
-        )
-
-    def forward(self, x, cond):
-        gamma_beta = self.mlp(cond)
-        gamma, beta = gamma_beta[:, 0], gamma_beta[:, 1]
-        gamma = gamma.unsqueeze(1)
-        beta = beta.unsqueeze(1)
-        return gamma * x + beta
-    
-class FiLMActor(nn.Module):
-    def __init__(self, mlp_input_dim, actor_hidden_dims, num_actions, cond_dim, film_hidden_dims, activation):
-        super().__init__()
-        self.activation = activation
-        self.fc1 = nn.Linear(mlp_input_dim, actor_hidden_dims[0])
-        self.hidden_layers = nn.ModuleList()
-        for i in range(1, len(actor_hidden_dims)):
-            self.hidden_layers.append(nn.Linear(actor_hidden_dims[i - 1], actor_hidden_dims[i]))
-        self.output_layer = nn.Linear(actor_hidden_dims[-1], num_actions)
-        self.tanh = nn.Tanh()
-
-        self.film = ScalarFiLM(cond_dim, film_hidden_dims)
-        self.cond_dim = cond_dim
-
-    def forward(self, obs):
-        x = self.activation(self.fc1(obs))
-        x = self.film(x, obs[:, -self.cond_dim:])
-
-        for layer in self.hidden_layers:
-            x = self.activation(layer(x))
-        x = self.tanh(self.output_layer(x))
-        return x
 
 class ActorCritic(nn.Module):
     is_recurrent = False
@@ -60,10 +20,8 @@ class ActorCritic(nn.Module):
         num_actor_obs,
         num_critic_obs,
         num_actions,
-        actor_hidden_dims=[256, 256],
-        film_hidden_dims=[3, 3],
-        critic_hidden_dims=[256, 256],
-        cond_dim=2,
+        actor_hidden_dims=[256, 256, 256],
+        critic_hidden_dims=[256, 256, 256],
         activation="elu",
         init_noise_std=1.0,
         noise_std_type: str = "scalar",
@@ -80,16 +38,18 @@ class ActorCritic(nn.Module):
 
         mlp_input_dim_a = num_actor_obs
         mlp_input_dim_c = num_critic_obs
-
         # Policy
-        self.actor = FiLMActor(
-            mlp_input_dim=mlp_input_dim_a,
-            actor_hidden_dims=actor_hidden_dims,
-            num_actions=num_actions,
-            cond_dim=cond_dim,
-            film_hidden_dims=film_hidden_dims,
-            activation=activation
-        )
+        actor_layers = []
+        actor_layers.append(nn.Linear(mlp_input_dim_a, actor_hidden_dims[0]))
+        actor_layers.append(activation)
+        for layer_index in range(len(actor_hidden_dims)):
+            if layer_index == len(actor_hidden_dims) - 1:
+                actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], num_actions))
+                actor_layers.append(nn.Tanh())
+            else:
+                actor_layers.append(nn.Linear(actor_hidden_dims[layer_index], actor_hidden_dims[layer_index + 1]))
+                actor_layers.append(activation)
+        self.actor = nn.Sequential(*actor_layers)
 
         # Value function
         critic_layers = []
